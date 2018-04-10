@@ -1,0 +1,81 @@
+<!DOCTYPE HTML>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>OAuth2 Sample App - Intuit</title>
+  <link rel="stylesheet" type="text/css" href="../static/css/style.css" th:href="@{css/style.css}"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script>
+    if(window.opener) {
+      window.opener.location.href = '/connected'
+      window.close()
+    }
+    function companyInfo() {
+      $("#result").html('Loading...')
+      $.get("/getCompanyInfo", function(data) {
+        $("#result").html(data)
+      })
+    }
+    
+    function reports() {
+        $("#result").html('Loading...')
+        $.get("/reports", function(data) {
+          $("#result").html(data)
+        })
+    }
+
+    function accounting() {
+        $("#result").html('Loading...')
+        $.get("/accounting", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
+    function invoice() {
+        $("#result").html('Loading...')
+        $.get("/invoice", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
+    function inventory() {
+        $("#result").html('Loading...')
+        $.get("/inventory", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
+    function bill() {
+        $("#result").html('Loading...')
+        $.get("/bill", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
+    function job() {
+        $("#result").html('Loading...')
+        $.get("/jobs", function(data) {
+          $("#result").html(data)
+        })
+    }
+
+  </script>
+</head>
+<body>
+  <a href="/">Home</a>
+  <h3>Connected!</h3>
+  
+  <div>
+    <button onclick="companyInfo()">CompanyInfo</button>
+    <button onclick="reports()">Reports</button>
+    <button onclick="accounting()">Accounting</button>
+    <br /><br />
+    <button onclick="invoice()">Invoicing</button>
+    <button onclick="inventory()">Managing Inventory</button>
+    <button onclick="bill()">Pay Bills</button>
+    
+    <br /><br />
+    <button onclick="job()">Landing Jobs</button>
+    <div><code id="result"></code></div>
+    </div>
+</body>
+</html>
