@@ -66,7 +66,7 @@ public class InvoiceController {
      */
 	@ResponseBody
     @RequestMapping("/invoice")
-    public String invoicing(HttpSession session) {
+    public String callInvoicingConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {

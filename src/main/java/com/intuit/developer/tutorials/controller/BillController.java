@@ -44,7 +44,7 @@ public class BillController {
      */
 	@ResponseBody
     @RequestMapping("/bill")
-    public String callQBOCompanyInfo(HttpSession session) {
+    public String callBillingConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {

@@ -44,7 +44,7 @@ public class ReportsController {
      */
 	@ResponseBody
     @RequestMapping("/reports")
-    public String callQBOCompanyInfo(HttpSession session) {
+    public String callReportsConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {

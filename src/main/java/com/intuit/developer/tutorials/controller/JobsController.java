@@ -44,7 +44,7 @@ public class JobsController {
      */
 	@ResponseBody
     @RequestMapping("/jobs")
-    public String callQBOCompanyInfo(HttpSession session) {
+    public String callJobsConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {

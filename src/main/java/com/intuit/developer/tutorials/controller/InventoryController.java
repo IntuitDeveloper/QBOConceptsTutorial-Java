@@ -44,7 +44,7 @@ public class InventoryController {
      */
 	@ResponseBody
     @RequestMapping("/inventory")
-    public String callQBOCompanyInfo(HttpSession session) {
+    public String callInventoryConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {

@@ -16,6 +16,20 @@
       })
     }
     
+    function refreshToken() {
+        $("#result").html('Loading...')
+        $.get("/refreshToken", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
+    function revokeToken() {
+        $("#result").html('Loading...')
+        $.get("/revokeToken", function(data) {
+          $("#result").html(data)
+        })
+    }
+    
     function reports() {
         $("#result").html('Loading...')
         $.get("/reports", function(data) {
@@ -66,8 +80,8 @@
   
   <div>
     <button onclick="companyInfo()">CompanyInfo</button>
-    <button onclick="reports()">Reports</button>
-    <button onclick="accounting()">Accounting</button>
+    <button onclick="refreshToken()">Refresh Token</button>
+    <button onclick="revokeToken()">Revoke Token</button>
     <br /><br />
     <button onclick="invoice()">Invoicing</button>
     <button onclick="inventory()">Managing Inventory</button>
@@ -75,6 +89,8 @@
     
     <br /><br />
     <button onclick="job()">Landing Jobs</button>
+    <button onclick="reports()">Reports</button>
+    <button onclick="accounting()">Accounting</button>
     <div><code id="result"></code></div>
     </div>
 </body>

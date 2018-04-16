@@ -44,7 +44,7 @@ public class AccountingController {
      */
 	@ResponseBody
     @RequestMapping("/accounting")
-    public String callQBOCompanyInfo(HttpSession session) {
+    public String callAccountingConcept(HttpSession session) {
 
     	String realmId = (String)session.getAttribute("realmId");
     	if (StringUtils.isEmpty(realmId)) {
