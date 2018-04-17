@@ -80,7 +80,7 @@ public class AccountingController {
                 logger.info("JournalEntry created: " + savedJournalEntry.getId());
 
                 // Return the result
-                String result = "Journal Entry = " + savedJournalEntry.getId();
+                String result = "Created Journal Entry = " + savedJournalEntry.getId();
 
                 return result;
 
@@ -346,7 +346,7 @@ public class AccountingController {
 	}
 
     /**
-     * Fetch the Vendor Reference to the given Vendor
+     * Fetch the Vendor Reference for the given Vendor
      *
      * @param vendor The Vendor object
      * @return Vendor reference
