@@ -18,6 +18,7 @@ import com.intuit.ipp.data.AccountTypeEnum;
 import com.intuit.ipp.data.Customer;
 import com.intuit.ipp.data.DiscountLineDetail;
 import com.intuit.ipp.data.Estimate;
+import com.intuit.ipp.data.IntuitEntity;
 import com.intuit.ipp.data.Invoice;
 import com.intuit.ipp.data.Item;
 import com.intuit.ipp.data.ItemTypeEnum;
@@ -121,10 +122,8 @@ public class JobsController {
 
 			//return response back
     		return createResponse(updatedInvoice);
-			
-		}
-	    catch (InvalidTokenException e) {
-			return new JSONObject().put("response","InvalidToken - Refreshtoken and try again").toString();
+		} catch (InvalidTokenException e) {
+			return new JSONObject().put("response","InvalidToken - Refresh token and try again").toString();
 		} catch (FMSException e) {
 			List<Error> list = e.getErrorList();
 			list.forEach(error -> logger.error("Error while calling the API :: " + error.getMessage()));
@@ -136,7 +135,7 @@ public class JobsController {
         DiscountLineDetail discountLineDetail = new DiscountLineDetail();
 
         discountLineDetail.setPercentBased(false);
-        discountLineDetail.setDiscountAccountRef(createAccountRef(findAccountByType(AccountTypeEnum.INCOME, service)));
+        discountLineDetail.setDiscountAccountRef(createRef(findAccountByType(AccountTypeEnum.INCOME, service)));
 
         Line discountLine = new Line();
 
@@ -222,7 +221,7 @@ public class JobsController {
 		line1.setDetailType(LineDetailTypeEnum.SALES_ITEM_LINE_DETAIL);
 
 		SalesItemLineDetail salesItemLineDetail1 = new SalesItemLineDetail();
-		salesItemLineDetail1.setItemRef(createItemRef(item));
+		salesItemLineDetail1.setItemRef(createRef(item));
 
 		ReferenceType taxCodeRef1 = new ReferenceType();
 		taxCodeRef1.setValue("NON");
@@ -235,9 +234,9 @@ public class JobsController {
 
 
 		Account depositAccount = findAccountByType(AccountTypeEnum.BANK, service);
-		estimate.setDepositToAccountRef(createAccountRef(depositAccount));
+		estimate.setDepositToAccountRef(createRef(depositAccount));
 
-		estimate.setCustomerRef(createCustomerRef(customer));
+		estimate.setCustomerRef(createRef(customer));
 
 		estimate.setApplyTaxAfterDiscount(false);
 		estimate.setTotalAmt(new BigDecimal("300.00"));
@@ -274,31 +273,30 @@ public class JobsController {
 		item.setUnitPrice(new BigDecimal("200"));
 		item.setType(ItemTypeEnum.SERVICE);
 
-		item.setIncomeAccountRef(createAccountRef(findAccountByType(AccountTypeEnum.INCOME, service)));
-		item.setExpenseAccountRef(createAccountRef(findAccountByType(AccountTypeEnum.EXPENSE, service)));
+		item.setIncomeAccountRef(createRef(findAccountByType(AccountTypeEnum.INCOME, service)));
+		item.setExpenseAccountRef(createRef(findAccountByType(AccountTypeEnum.EXPENSE, service)));
 		return item;
 	}
 
-	private ReferenceType createAccountRef(Account account) {
+	private ReferenceType createRef(IntuitEntity entity) {
 		ReferenceType referenceType = new ReferenceType();
-		referenceType.setName(account.getName());
-		referenceType.setValue(account.getId());
+		referenceType.setValue(entity.getId());
 		return referenceType;
 	}
 
-	private ReferenceType createItemRef(Item item) {
-		ReferenceType referenceType = new ReferenceType();
-		referenceType.setName(item.getName());
-		referenceType.setValue(item.getId());
-		return referenceType;
-	}
-
-	private ReferenceType createCustomerRef(Customer customer) {
-		ReferenceType referenceType = new ReferenceType();
-		referenceType.setName(customer.getFullyQualifiedName());
-		referenceType.setValue(customer.getId());
-		return referenceType;
-	}
+//	private ReferenceType createItemRef(Item item) {
+//		ReferenceType referenceType = new ReferenceType();
+//		referenceType.setName(item.getName());
+//		referenceType.setValue(item.getId());
+//		return referenceType;
+//	}
+//
+//	private ReferenceType createCustomerRef(Customer customer) {
+//		ReferenceType referenceType = new ReferenceType();
+//		referenceType.setName(customer.getFullyQualifiedName());
+//		referenceType.setValue(customer.getId());
+//		return referenceType;
+//	}
 
 	private String createResponse(Object entity) {
 		ObjectMapper mapper = new ObjectMapper();
