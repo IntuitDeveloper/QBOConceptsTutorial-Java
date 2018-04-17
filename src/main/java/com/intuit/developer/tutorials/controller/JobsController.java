@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import javax.servlet.http.HttpSession;
@@ -12,6 +11,7 @@ import javax.servlet.http.HttpSession;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.ipp.core.Context;
+import com.intuit.ipp.core.IEntity;
 import com.intuit.ipp.core.ServiceType;
 import com.intuit.ipp.data.Account;
 import com.intuit.ipp.data.AccountTypeEnum;
@@ -27,6 +27,7 @@ import com.intuit.ipp.data.LineDetailTypeEnum;
 import com.intuit.ipp.data.ReferenceType;
 import com.intuit.ipp.data.SalesItemLineDetail;
 import com.intuit.ipp.security.OAuth2Authorizer;
+import com.intuit.ipp.services.QueryResult;
 import com.intuit.ipp.util.Config;
 import com.intuit.ipp.util.DateUtils;
 import org.apache.commons.lang.StringUtils;
@@ -52,7 +53,9 @@ import com.intuit.ipp.services.DataService;
 @Controller
 public class JobsController {
 
-	public static final String MINOR_VERSION = "4";
+	private static final String MINOR_VERSION = "4";
+
+	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' maxresults 1";
 
 	@Autowired
 	OAuth2PlatformClientFactory factory;
@@ -246,17 +249,17 @@ public class JobsController {
 	}
 
 	private Account findAccountByType(AccountTypeEnum accountTypeEnum, DataService service) throws FMSException {
-		final List<Account> accountList = service.findAll(new Account());
 
-		final Iterator<Account> accountIterator = accountList.iterator();
+		final QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, accountTypeEnum.value()));
 
-		while (accountIterator.hasNext()) {
-			final Account account = accountIterator.next();
-			if(account.getAccountType() == accountTypeEnum) {
-				return account;
-			}
+		final List<? extends IEntity> entities = queryResult.getEntities();
+
+		Account account = null;
+
+		if(!entities.isEmpty()) {
+			account = (Account)entities.get(0);
 		}
-		return null;
+		return account;
 	}
 
 	private Customer getCustomerWithMandatoryFields() {
