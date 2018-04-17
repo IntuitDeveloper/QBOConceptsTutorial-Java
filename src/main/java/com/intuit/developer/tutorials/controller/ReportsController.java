@@ -27,18 +27,21 @@ import org.springframework.web.bind.annotation.ResponseBody;
  */
 @Controller
 public class ReportsController {
+
 	@Autowired
 	OAuth2PlatformClientFactory factory;
 
 	@Autowired
-   	public QBOServiceHelper helper;
+    	public QBOServiceHelper helper;
+
 
 	private static final Logger logger = Logger.getLogger(ReportsController.class);
 
+
 	/**
      	* Sample QBO API call using OAuth2 tokens
-	*
-        * @param session the HttpSession
+     	*
+     	* @param session the HttpSession
      	* @return a report in JSON String format
      	*/
 	@ResponseBody
@@ -50,9 +53,11 @@ public class ReportsController {
     			return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
     		}
 
+    		String accessToken = (String)session.getAttribute("access_token");
         	try {
 			// get ReportService
-			ReportService service = getReportService(session);
+			ReportService service = getReportService("2017-01-01", "2017-12-31", "Customers",
+					realmId, accessToken);
 
 			String reportString = getReportString(service, ReportName.BALANCESHEET.toString());
 			logger.info("retrieved balance sheet report, " +  reportString);
@@ -73,34 +78,23 @@ public class ReportsController {
 
 	/**
 	 * Create a ReportService from given parameters
-	 * @param session http session.
+	 * @param startDate start date of the report
+	 * @param endDate end date of the report
+	 * @param summarizeCriteria the criteria to sort the report
+	 * @param realmId unique identifier for the user
+	 * @param accessToken access token to authenticate the user
 	 * @return an instance of report service with configurations defined in parameters
 	 * @throws FMSException throw exception if failed to authenticate the user
 	 */
-    	private ReportService getReportService(HttpSession session) throws FMSException {
-		String realmId = (String)session.getAttribute("realmId");
-		String accessToken = (String)session.getAttribute("access_token");
+    	private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
+										   String realmId, String accessToken) throws FMSException {
 		ReportService service = helper.getReportService(realmId, accessToken);
 
-		String startDate = (String) session.getAttribute("start_date");
-		if (StringUtils.isNotEmpty(startDate)) {
-			service.setStart_date(startDate);
-		}
+		service.setStart_date(startDate);
+		service.setEnd_date(endDate);
+		service.setSummarize_column_by(summarizeCriteria);
 
-		String endDate = (String) session.getAttribute("end_date");
-		if (StringUtils.isNotEmpty(endDate)) {
-			service.setEnd_date(endDate);
-		}
-
-		String summarizeColumnBy = (String) session.getAttribute("summarize_column_by");
-		if (StringUtils.isNotEmpty(summarizeColumnBy)) {
-			service.setSummarize_column_by(summarizeColumnBy);
-		}
-
-		String accountingMethod = (String) session.getAttribute("accounting_method");
-		if (StringUtils.isNotEmpty(accountingMethod)) {
-			service.setAccounting_method(accountingMethod);
-		}
+		service.setAccounting_method("Accrual");
 
 		return service;
 	}
