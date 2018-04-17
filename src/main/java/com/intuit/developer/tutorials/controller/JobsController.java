@@ -113,22 +113,10 @@ public class JobsController {
 			final Invoice createdInvoice = service.add(invoice);
 
 			//update invoice to add discount
-
-			DiscountLineDetail discountLineDetail = new DiscountLineDetail();
-
-			discountLineDetail.setPercentBased(false);
-			discountLineDetail.setDiscountAccountRef(createAccountRef(findAccountByType(AccountTypeEnum.INCOME, service)));
-
-			Line discountLine = new Line();
-
-			discountLine.setDiscountLineDetail(discountLineDetail);
-			discountLine.setDetailType(LineDetailTypeEnum.DISCOUNT_LINE_DETAIL);
-			discountLine.setAmount(new BigDecimal("10.00"));
-
+            Line discountLine = createDiscountLine(service);
 			createdInvoice.getLine().add(discountLine);
 
-			createdInvoice.setSparse(true);
-
+			//update the invoice with the discount line
 			final Invoice updatedInvoice = service.update(createdInvoice);
 
 			//return response back
@@ -144,7 +132,21 @@ public class JobsController {
 		}
     }
 
-	/**
+    private Line createDiscountLine(DataService service) throws FMSException {
+        DiscountLineDetail discountLineDetail = new DiscountLineDetail();
+
+        discountLineDetail.setPercentBased(false);
+        discountLineDetail.setDiscountAccountRef(createAccountRef(findAccountByType(AccountTypeEnum.INCOME, service)));
+
+        Line discountLine = new Line();
+
+        discountLine.setDiscountLineDetail(discountLineDetail);
+        discountLine.setDetailType(LineDetailTypeEnum.DISCOUNT_LINE_DETAIL);
+        discountLine.setAmount(new BigDecimal("10.00"));
+        return discountLine;
+    }
+
+    /**
 	 * This method is an override with duplication of the QBOServiceHelper
 	 * to pass in a different minor version.  This is due to an invoice update
 	 * failing with the discount line for minor version "23" (SDK default), hence
@@ -177,7 +179,7 @@ public class JobsController {
 
 		invoice.setCustomerRef(estimate.getCustomerRef());
 
-		List<Line> invoiceLine = new ArrayList<Line>();
+		List<Line> invoiceLine = new ArrayList<>();
 
 
 		Line line = null;
