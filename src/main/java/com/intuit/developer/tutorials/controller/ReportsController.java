@@ -1,6 +1,5 @@
 package com.intuit.developer.tutorials.controller;
 
-import java.util.ArrayList;
 import java.util.List;
 import javax.servlet.http.HttpSession;
 
@@ -28,68 +27,80 @@ import org.springframework.web.bind.annotation.ResponseBody;
  */
 @Controller
 public class ReportsController {
-
 	@Autowired
 	OAuth2PlatformClientFactory factory;
 
 	@Autowired
    	public QBOServiceHelper helper;
 
-
 	private static final Logger logger = Logger.getLogger(ReportsController.class);
 
-
 	/**
-	  * Sample QBO API call using OAuth2 tokens
-	  *
-          * @param session the HttpSession
-          * @return a report in JSON String format
-        */
+     	* Sample QBO API call using OAuth2 tokens
+	*
+        * @param session the HttpSession
+     	* @return a report in JSON String format
+     	*/
 	@ResponseBody
-        @RequestMapping("/reports")
-        public String callReportsConcept(HttpSession session) {
+    	@RequestMapping("/reports")
+    	public String callReportsConcept(HttpSession session) {
     		String realmId = (String)session.getAttribute("realmId");
 
     		if (StringUtils.isEmpty(realmId)) {
     			return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
     		}
 
-	    	String accessToken = (String)session.getAttribute("access_token");
         	try {
 			// get ReportService
-			ReportService service = getReportService("2017-01-01", "2017-12-31", "Customers",
-					realmId, accessToken);
+			ReportService service = getReportService(session);
 
-			return getReport(service, ReportName.BALANCESHEET.toString());
+			String reportString = getReportString(service, ReportName.BALANCESHEET.toString());
+			logger.info("retrieved balance sheet report, " +  reportString);
+			reportString = getReportString(service, ReportName.PROFITANDLOSS.toString());
+			logger.info("retrieved profit and loss report" + reportString);
+
+			return reportString;
 		} catch (InvalidTokenException e) {
-	        	logger.error("invalid token: ", e);
+        		logger.error("invalid token: ", e);
 			return new JSONObject().put("response","InvalidToken - Refreshtoken and try again").toString();
 		} catch (FMSException e) {
 			List<Error> list = e.getErrorList();
 			list.forEach(error -> logger.error("Error while calling the API :: " + error.getMessage()));
 			return new JSONObject().put("response","Failed").toString();
 		}
+
     	}
 
 	/**
 	 * Create a ReportService from given parameters
-	 * @param startDate start date of the report
-	 * @param endDate end date of the report
-	 * @param summarizeCriteria the criteria to sort the report
-	 * @param realmId unique identifier for the user
-	 * @param accessToken access token to authenticate the user
+	 * @param session http session.
 	 * @return an instance of report service with configurations defined in parameters
 	 * @throws FMSException throw exception if failed to authenticate the user
 	 */
-    	private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
-										   String realmId, String accessToken) throws FMSException {
+    	private ReportService getReportService(HttpSession session) throws FMSException {
+		String realmId = (String)session.getAttribute("realmId");
+		String accessToken = (String)session.getAttribute("access_token");
 		ReportService service = helper.getReportService(realmId, accessToken);
 
-		service.setStart_date(startDate);
-		service.setEnd_date(endDate);
-		service.setSummarize_column_by(summarizeCriteria);
+		String startDate = (String) session.getAttribute("start_date");
+		if (StringUtils.isNotEmpty(startDate)) {
+			service.setStart_date(startDate);
+		}
 
-		service.setAccounting_method("Accrual");
+		String endDate = (String) session.getAttribute("end_date");
+		if (StringUtils.isNotEmpty(endDate)) {
+			service.setEnd_date(endDate);
+		}
+
+		String summarizeColumnBy = (String) session.getAttribute("summarize_column_by");
+		if (StringUtils.isNotEmpty(summarizeColumnBy)) {
+			service.setSummarize_column_by(summarizeColumnBy);
+		}
+
+		String accountingMethod = (String) session.getAttribute("accounting_method");
+		if (StringUtils.isNotEmpty(accountingMethod)) {
+			service.setAccounting_method(accountingMethod);
+		}
 
 		return service;
 	}
@@ -101,7 +112,7 @@ public class ReportsController {
 	 * @return report in JSON format specified by the report name.
 	 * @throws FMSException if failed to retrieve the report by report name.
 	 */
-	private String getReport(ReportService service, String reportName) throws FMSException {
+	private String getReportString(ReportService service, String reportName) throws FMSException {
 		Report report = service.executeReport(reportName);
 		logger.info("ReportName -> name: " + report.getHeader().getReportName().toLowerCase());
 
