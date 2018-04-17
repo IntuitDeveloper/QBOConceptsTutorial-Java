@@ -23,6 +23,7 @@ import com.intuit.ipp.data.Line;
 import com.intuit.ipp.data.LineDetailTypeEnum;
 import com.intuit.ipp.data.ReferenceType;
 import com.intuit.ipp.data.SalesItemLineDetail;
+import com.intuit.ipp.services.QueryResult;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.log4j.Logger;
@@ -170,16 +171,13 @@ public class InventoryController {
 	}
 
 	public static Account getIncomeBankAccount(DataService service) throws FMSException {
-		List<Account> accounts = (List<Account>) service.findAll(new Account());
+		QueryResult queryResult = service.executeQuery(String.format(
+				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
+				AccountTypeEnum.INCOME.value(), AccountSubTypeEnum.SALES_OF_PRODUCT_INCOME.value()
+		));
+		List<Account> accounts = (List<Account>) queryResult.getEntities();
 		if (!accounts.isEmpty()) {
-			Iterator<Account> itr = accounts.iterator();
-			while (itr.hasNext()) {
-				Account account = itr.next();
-				if (account.getAccountType().equals(AccountTypeEnum.INCOME) &&
-						account.getAccountSubType().equals(AccountSubTypeEnum.SALES_OF_PRODUCT_INCOME.value())) {
-					return account;
-				}
-			}
+			return accounts.get(0);
 		}
 		return createIncomeBankAccount(service);
 	}
@@ -208,16 +206,13 @@ public class InventoryController {
 	}
 
 	public static Account getExpenseBankAccount(DataService service) throws FMSException {
-		List<Account> accounts = (List<Account>) service.findAll(new Account());
+		QueryResult queryResult = service.executeQuery(String.format(
+				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
+				AccountTypeEnum.COST_OF_GOODS_SOLD.value(), AccountSubTypeEnum.SUPPLIES_MATERIALS_COGS.value()
+		));
+		List<Account> accounts = (List<Account>) queryResult.getEntities();
 		if (!accounts.isEmpty()) {
-			Iterator<Account> itr = accounts.iterator();
-			while (itr.hasNext()) {
-				Account account = itr.next();
-				if (account.getAccountType().equals(AccountTypeEnum.COST_OF_GOODS_SOLD) &&
-						account.getAccountSubType().equals(AccountSubTypeEnum.SUPPLIES_MATERIALS_COGS.value())) {
-					return account;
-				}
-			}
+			return accounts.get(0);
 		}
 		return createExpenseBankAccount(service);
 	}
@@ -228,7 +223,7 @@ public class InventoryController {
 
 	public static Account getExpenseBankAccountFields() throws FMSException {
 		Account account = new Account();
-		account.setName("Expense" + RandomStringUtils.randomAlphabetic(5));
+		account.setName("Expense " + RandomStringUtils.randomAlphabetic(5));
 		account.setSubAccount(false);
 		account.setFullyQualifiedName(account.getName());
 		account.setActive(true);
@@ -246,16 +241,13 @@ public class InventoryController {
 	}
 
 	public static Account getAssetAccount(DataService service)  throws FMSException{
-		List<Account> accounts = (List<Account>) service.findAll(new Account());
+		QueryResult queryResult = service.executeQuery(String.format(
+				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
+				AccountTypeEnum.OTHER_CURRENT_ASSET.value(), AccountSubTypeEnum.INVENTORY.value()
+		));
+		List<Account> accounts = (List<Account>) queryResult.getEntities();
 		if (!accounts.isEmpty()) {
-			Iterator<Account> itr = accounts.iterator();
-			while (itr.hasNext()) {
-				Account account = itr.next();
-				if (account.getAccountType().equals(AccountTypeEnum.OTHER_CURRENT_ASSET) &&
-						account.getAccountSubType().equals(AccountSubTypeEnum.INVENTORY.value())) {
-					return account;
-				}
-			}
+			return accounts.get(0);
 		}
 		return createOtherCurrentAssetAccount(service);
 	}
