@@ -28,27 +28,28 @@ import org.springframework.web.bind.annotation.ResponseBody;
  */
 @Controller
 public class ReportsController {
-	
+
 	@Autowired
 	OAuth2PlatformClientFactory factory;
-	
+
 	@Autowired
     public QBOServiceHelper helper;
 
-	
+
 	private static final Logger logger = Logger.getLogger(ReportsController.class);
-	
-	
+
+
 	/**
      * Sample QBO API call using OAuth2 tokens
-     * 
+     *
      * @param session the HttpSession
-     * @return a list of reports in JSON separated by ","
+     * @return a report in JSON String format
      */
 	@ResponseBody
     @RequestMapping("/reports")
     public String callReportsConcept(HttpSession session) {
     	String realmId = (String)session.getAttribute("realmId");
+
     	if (StringUtils.isEmpty(realmId)) {
     		return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
     	}
@@ -56,15 +57,12 @@ public class ReportsController {
     	String accessToken = (String)session.getAttribute("access_token");
         try {
 			// get ReportService
-			ReportService service = getReportService("2018-01-01", "2018-04-06", "Customers",
+			ReportService service = getReportService("2017-01-01", "2017-12-31", "Customers",
 					realmId, accessToken);
 
-			List<String> reportNames = new ArrayList<>();
-			reportNames.add(ReportName.BALANCESHEET.toString());
-			reportNames.add(ReportName.PROFITANDLOSS.toString());
-
-			return getReports(service, reportNames);
+			return getReport(service, ReportName.BALANCESHEET.toString());
 		} catch (InvalidTokenException e) {
+        	logger.error("invalid token: ", e);
 			return new JSONObject().put("response","InvalidToken - Refreshtoken and try again").toString();
 		} catch (FMSException e) {
 			List<Error> list = e.getErrorList();
@@ -81,7 +79,7 @@ public class ReportsController {
 	 * @param summarizeCriteria the criteria to sort the report
 	 * @param realmId unique identifier for the user
 	 * @param accessToken access token to authenticate the user
-	 * @return an instance of report service
+	 * @return an instance of report service with configurations defined in parameters
 	 * @throws FMSException throw exception if failed to authenticate the user
 	 */
     private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
@@ -98,21 +96,17 @@ public class ReportsController {
 	}
 
 	/**
-	 * Get a list of reports by the given report names.
+	 * Get report by the given report name.
 	 * @param service the report service
-	 * @param reportNames a list of report names
-	 * @return a list of reports in JSON format separated by comma.
+	 * @param reportName report name, e.g. "BalanceSheet", "ProfitAndLoss", etc.
+	 * @return report in JSON format specified by the report name.
 	 * @throws FMSException if failed to retrieve the report by report name.
 	 */
-    private String getReports(ReportService service, List<String> reportNames) throws FMSException {
-		StringBuilder reports = new StringBuilder();
-		for (String reportName : reportNames) {
-			Report report = service.executeReport(reportName);
-			reports.append(processResponse(report));
-			logger.info("ReportName -> name: " + report.getHeader().getReportName().toLowerCase());
-		}
+	private String getReport(ReportService service, String reportName) throws FMSException {
+		Report report = service.executeReport(reportName);
+		logger.info("ReportName -> name: " + report.getHeader().getReportName().toLowerCase());
 
-		return reports.toString();
+		return processResponse(report);
 	}
 
 	/**
@@ -130,5 +124,4 @@ public class ReportsController {
 			return new JSONObject().put("response","Failed").toString();
 		}
 	}
-    
 }
