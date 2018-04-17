@@ -1,0 +1,26 @@
+# Gradle
+# ------
+.gradle
+/build
+
+# IDEA
+# ----
+.idea
+.shelf
+/*.iml
+/*.ipr
+/*.iws
+
+# Eclipse
+# -------
+*.classpath
+*.project
+*.settings
+/bin
+atlassian-ide-plugin.xml
+.metadata/
+
+# NetBeans
+# --------
+.nb-gradle
+.nb-gradle-properties
