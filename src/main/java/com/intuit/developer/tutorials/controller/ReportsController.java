@@ -33,44 +33,43 @@ public class ReportsController {
 	OAuth2PlatformClientFactory factory;
 
 	@Autowired
-    public QBOServiceHelper helper;
+   	public QBOServiceHelper helper;
 
 
 	private static final Logger logger = Logger.getLogger(ReportsController.class);
 
 
 	/**
-     * Sample QBO API call using OAuth2 tokens
-     *
-     * @param session the HttpSession
-     * @return a report in JSON String format
-     */
+	  * Sample QBO API call using OAuth2 tokens
+	  *
+          * @param session the HttpSession
+          * @return a report in JSON String format
+        */
 	@ResponseBody
-    @RequestMapping("/reports")
-    public String callReportsConcept(HttpSession session) {
-    	String realmId = (String)session.getAttribute("realmId");
+        @RequestMapping("/reports")
+        public String callReportsConcept(HttpSession session) {
+    		String realmId = (String)session.getAttribute("realmId");
 
-    	if (StringUtils.isEmpty(realmId)) {
-    		return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
-    	}
+    		if (StringUtils.isEmpty(realmId)) {
+    			return new JSONObject().put("response","No realm ID.  QBO calls only work if the accounting scope was passed!").toString();
+    		}
 
-    	String accessToken = (String)session.getAttribute("access_token");
-        try {
+	    	String accessToken = (String)session.getAttribute("access_token");
+        	try {
 			// get ReportService
 			ReportService service = getReportService("2017-01-01", "2017-12-31", "Customers",
 					realmId, accessToken);
 
 			return getReport(service, ReportName.BALANCESHEET.toString());
 		} catch (InvalidTokenException e) {
-        	logger.error("invalid token: ", e);
+	        	logger.error("invalid token: ", e);
 			return new JSONObject().put("response","InvalidToken - Refreshtoken and try again").toString();
 		} catch (FMSException e) {
 			List<Error> list = e.getErrorList();
 			list.forEach(error -> logger.error("Error while calling the API :: " + error.getMessage()));
 			return new JSONObject().put("response","Failed").toString();
 		}
-
-    }
+    	}
 
 	/**
 	 * Create a ReportService from given parameters
@@ -82,7 +81,7 @@ public class ReportsController {
 	 * @return an instance of report service with configurations defined in parameters
 	 * @throws FMSException throw exception if failed to authenticate the user
 	 */
-    private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
+    	private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
 										   String realmId, String accessToken) throws FMSException {
 		ReportService service = helper.getReportService(realmId, accessToken);
 
