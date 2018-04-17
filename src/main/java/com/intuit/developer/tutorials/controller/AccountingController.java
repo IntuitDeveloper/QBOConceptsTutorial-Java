@@ -65,17 +65,17 @@ public class AccountingController {
         	// Get DataService
     		DataService service = helper.getDataService(realmId, accessToken);
 
-    		// Create OR Fetch BankAccount
-            Account savedAccount = getBankAccount(service);
+    		// Create OR Fetch DebitAccount
+            Account savedDebitAccount = getDebitAccount(service);
 
-            // Create OR Fetch CreditCaerd Account
+            // Create OR Fetch CreditCard Account
             Account savedCreditAccount = getCreditCardBankAccount(service);
     		
     		// Create Journal Entry using the accounts above
 
 			try{
 			    // Add JournalEntry
-                JournalEntry journalentry = getJournalEntryFields(service, savedAccount, savedCreditAccount);
+                JournalEntry journalentry = getJournalEntryFields(service, savedDebitAccount, savedCreditAccount);
                 JournalEntry savedJournalEntry = service.add(journalentry);
                 logger.info("JournalEntry created: " + savedJournalEntry.getId());
 
@@ -104,12 +104,12 @@ public class AccountingController {
 
 
     /**
-     * Initializes a BankAccount object
+     * Initializes a DebitAccount object
      *
-     * @return BankAccount object
+     * @return DebitAccount object
      * @throws FMSException
      */
-	private static Account getBankAccountFields() throws FMSException {
+	private static Account getDebitAccountFields() throws FMSException {
 
         Account account = new Account();
 		account.setName("Ba" + RandomStringUtils.randomAlphanumeric(7));
@@ -127,13 +127,13 @@ public class AccountingController {
 	}
 
     /**
-     * Create OR lookup Bank Account
+     * Create OR lookup Debit Account
      *
      * @param service Reference to the DataService to create the Account
      * @return The BankAccount object
      * @throws FMSException
      */
-    private static Account getBankAccount(DataService service) throws FMSException {
+    private static Account getDebitAccount(DataService service) throws FMSException {
 
         List<Account> accounts = (List<Account>) service.findAll(new Account());
 
@@ -147,18 +147,18 @@ public class AccountingController {
             }
         }
 
-        return createBankAccount(service);
+        return createDebitAccount(service);
     }
 
     /**
-     * Creates the BankAccount by calling QBO V3 services
+     * Creates the DebitAccount by calling QBO V3 services
      *
      * @param service Reference to the DataService to create the Account
-     * @return The BankAccount object
+     * @return The DebitAccount object
      * @throws FMSException
      */
-    private static Account createBankAccount(DataService service) throws FMSException {
-        return service.add(getBankAccountFields());
+    private static Account createDebitAccount(DataService service) throws FMSException {
+        return service.add(getDebitAccountFields());
     }
 
     /**
@@ -227,13 +227,13 @@ public class AccountingController {
      * This method internally creates or lookup a Vendor
      *
      * @param service Reference to the DataService to create the JournalEntry
-     * @param bankAccount The BankAccount reference
+     * @param debitAccount The BankAccount reference
      * @param creditAccount The CreditAccount reference
      * @return Reference to the created JournalEntry
      * @throws FMSException
      * @throws ParseException
      */
-	private static JournalEntry getJournalEntryFields(DataService service, Account bankAccount, Account creditAccount) throws FMSException, ParseException {
+	private static JournalEntry getJournalEntryFields(DataService service, Account debitAccount, Account creditAccount) throws FMSException, ParseException {
 
 	    JournalEntry journalEntry = new JournalEntry();
 		try {
@@ -248,7 +248,7 @@ public class AccountingController {
 		JournalEntryLineDetail journalEntryLineDetail1 = new JournalEntryLineDetail();
 		journalEntryLineDetail1.setPostingType(PostingTypeEnum.DEBIT);
 
-		journalEntryLineDetail1.setAccountRef(getAccountRef(bankAccount));
+		journalEntryLineDetail1.setAccountRef(getAccountRef(debitAccount));
 
 		line1.setJournalEntryLineDetail(journalEntryLineDetail1);
 		line1.setDescription("Description " + RandomStringUtils.randomAlphanumeric(15));
@@ -263,7 +263,7 @@ public class AccountingController {
 		journalEntryLineDetail2.setAccountRef(getAccountRef(creditAccount));
 		EntityTypeRef eRef = new EntityTypeRef();
 		eRef.setType(EntityTypeEnum.VENDOR);
-		eRef.setEntityRef(getVendorRef(getVendor(service)));
+		eRef.setEntityRef(getVendorRef(getVendor(service)));    // Set a Vendor as reference
 		journalEntryLineDetail2.setEntity(eRef);
 
 		line2.setJournalEntryLineDetail(journalEntryLineDetail2);
