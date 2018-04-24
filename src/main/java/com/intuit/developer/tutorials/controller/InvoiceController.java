@@ -2,7 +2,6 @@ package com.intuit.developer.tutorials.controller;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import javax.servlet.http.HttpSession;
@@ -20,13 +19,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.developer.tutorials.client.OAuth2PlatformClientFactory;
 import com.intuit.developer.tutorials.helper.QBOServiceHelper;
+import com.intuit.ipp.core.IEntity;
 import com.intuit.ipp.data.Account;
-import com.intuit.ipp.data.AccountClassificationEnum;
-import com.intuit.ipp.data.AccountSubTypeEnum;
 import com.intuit.ipp.data.AccountTypeEnum;
 import com.intuit.ipp.data.Customer;
 import com.intuit.ipp.data.EmailAddress;
 import com.intuit.ipp.data.Error;
+import com.intuit.ipp.data.IntuitEntity;
 import com.intuit.ipp.data.Invoice;
 import com.intuit.ipp.data.Item;
 import com.intuit.ipp.data.ItemTypeEnum;
@@ -40,6 +39,7 @@ import com.intuit.ipp.data.TxnTypeEnum;
 import com.intuit.ipp.exception.FMSException;
 import com.intuit.ipp.exception.InvalidTokenException;
 import com.intuit.ipp.services.DataService;
+import com.intuit.ipp.services.QueryResult;
 
 /**
  * @author dderose
@@ -48,14 +48,16 @@ import com.intuit.ipp.services.DataService;
 @Controller
 public class InvoiceController {
 	
+	
 	@Autowired
 	OAuth2PlatformClientFactory factory;
 	
 	@Autowired
     public QBOServiceHelper helper;
-
 	
 	private static final Logger logger = Logger.getLogger(InvoiceController.class);
+	
+	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' maxresults 1";
 	
 	
 	/**
@@ -99,7 +101,7 @@ public class InvoiceController {
 			Payment savedPayment = service.add(payment);
 			
 			//return response back
-			return processResponse(savedPayment);
+			return createResponse(savedPayment);
 			
 		}
 	        
@@ -113,6 +115,10 @@ public class InvoiceController {
 		
     }
 	
+	/**
+	 * Create Customer request
+	 * @return
+	 */
 	private Customer getCustomerWithAllFields() {
 		Customer customer = new Customer();
 		customer.setDisplayName(RandomStringUtils.randomAlphanumeric(6));
@@ -125,67 +131,65 @@ public class InvoiceController {
 		return customer;
 	}
 	
+	/**
+	 * Create Item request
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
 	private Item getItemFields(DataService service) throws FMSException {
 
 		Item item = new Item();
 		item.setName("Item" + RandomStringUtils.randomAlphanumeric(5));
-		item.setActive(true);
 		item.setTaxable(false);
 		item.setUnitPrice(new BigDecimal("200"));
 		item.setType(ItemTypeEnum.SERVICE);
 
 		Account incomeAccount = getIncomeBankAccount(service);
-		
-		ReferenceType accountRef = new ReferenceType();
-		accountRef.setValue(incomeAccount.getId());
-		item.setIncomeAccountRef(accountRef);
+		item.setIncomeAccountRef(createRef(incomeAccount));
 		
 		return item;
 	}
 	
+	/**
+	 * Get Income account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
 	private Account getIncomeBankAccount(DataService service) throws FMSException {
-		List<Account> accounts = (List<Account>) service.findAll(new Account());
-		if (!accounts.isEmpty()) {
-			Iterator<Account> itr = accounts.iterator();
-			while (itr.hasNext()) {
-				Account account = itr.next();
-				if (account.getAccountType().equals(AccountTypeEnum.INCOME)) {
-					return account;
-				}
-			}
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.INCOME.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
 		}
 		return createIncomeBankAccount(service);
 	}
 
+	/**
+	 * Create Income account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
 	private Account createIncomeBankAccount(DataService service) throws FMSException {
-		return service.add(getIncomeBankAccountFields());
-	}
-	
-	private Account getIncomeBankAccountFields() throws FMSException {
 		Account account = new Account();
 		account.setName("Incom" + RandomStringUtils.randomAlphabetic(5));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
-		account.setClassification(AccountClassificationEnum.REVENUE);
 		account.setAccountType(AccountTypeEnum.INCOME);
-		account.setAccountSubType(AccountSubTypeEnum.SERVICE_FEE_INCOME.value());
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		ReferenceType currencyRef = new ReferenceType();
-		currencyRef.setName("United States Dollar");
-		currencyRef.setValue("USD");
-		account.setCurrencyRef(currencyRef);
-
-		return account;
+		
+		return service.add(account);
 	}
 	
+	/**
+	 * Prepare Invoice request
+	 * @param customer
+	 * @param item
+	 * @return
+	 */
 	private Invoice getInvoiceFields(Customer customer, Item item) {
-		Invoice invoice = new Invoice();
 		
-		ReferenceType customerRef = new ReferenceType();
-		customerRef.setValue(customer.getId());
-		invoice.setCustomerRef(customerRef);
+		Invoice invoice = new Invoice();
+		invoice.setCustomerRef(createRef(customer));
 		
 		List<Line> invLine = new ArrayList<Line>();
 		Line line = new Line();
@@ -193,10 +197,7 @@ public class InvoiceController {
 		line.setDetailType(LineDetailTypeEnum.SALES_ITEM_LINE_DETAIL);
 		
 		SalesItemLineDetail silDetails = new SalesItemLineDetail();
-		
-		ReferenceType itemRef = new ReferenceType();
-		itemRef.setValue(item.getId());
-		silDetails.setItemRef(itemRef);
+		silDetails.setItemRef(createRef(item));
 
 		line.setSalesItemLineDetail(silDetails);
 		invLine.add(line);
@@ -205,13 +206,16 @@ public class InvoiceController {
 		return invoice;
 	}
 	
+	/**
+	 * Prepare Payment request
+	 * @param customer
+	 * @param invoice
+	 * @return
+	 */
 	private Payment getPaymentFields(Customer customer, Invoice invoice) {
 		
-		Payment payment = new Payment();
-		
-		ReferenceType customerRef = new ReferenceType();
-		customerRef.setValue(customer.getId());
-		payment.setCustomerRef(customerRef);
+		Payment payment = new Payment();	
+		payment.setCustomerRef(createRef(customer));
 		
 		payment.setTotalAmt(invoice.getTotalAmt());
 		
@@ -231,16 +235,40 @@ public class InvoiceController {
 
 		return payment;
 	}
-	
-	private String processResponse(Object entity) {
+
+	/**
+	 * Creates reference type for an entity
+	 * 
+	 * @param entity - IntuitEntity object inherited by each entity
+	 * @return
+	 */
+	private ReferenceType createRef(IntuitEntity entity) {
+		ReferenceType referenceType = new ReferenceType();
+		referenceType.setValue(entity.getId());
+		return referenceType;
+	}
+
+	/**
+	 * Map object to json string
+	 * @param entity
+	 * @return
+	 */
+	private String createResponse(Object entity) {
 		ObjectMapper mapper = new ObjectMapper();
+		String jsonInString;
 		try {
-			String jsonInString = mapper.writeValueAsString(entity);
-			return jsonInString;
+			jsonInString = mapper.writeValueAsString(entity);
 		} catch (JsonProcessingException e) {
-			logger.error("Exception while getting company info ", e);
-			return new JSONObject().put("response","Failed").toString();
+			return createErrorResponse(e);
+		} catch (Exception e) {
+			return createErrorResponse(e);
 		}
+		return jsonInString;
+	}
+
+	private String createErrorResponse(Exception e) {
+		logger.error("Exception while calling QBO ", e);
+		return new JSONObject().put("response","Failed").toString();
 	}
 
     

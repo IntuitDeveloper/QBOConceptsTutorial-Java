@@ -7,22 +7,6 @@ import java.util.List;
 
 import javax.servlet.http.HttpSession;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.intuit.ipp.data.Account;
-import com.intuit.ipp.data.AccountClassificationEnum;
-import com.intuit.ipp.data.AccountSubTypeEnum;
-import com.intuit.ipp.data.AccountTypeEnum;
-import com.intuit.ipp.data.Customer;
-import com.intuit.ipp.data.EmailAddress;
-import com.intuit.ipp.data.Invoice;
-import com.intuit.ipp.data.Item;
-import com.intuit.ipp.data.ItemTypeEnum;
-import com.intuit.ipp.data.Line;
-import com.intuit.ipp.data.LineDetailTypeEnum;
-import com.intuit.ipp.data.ReferenceType;
-import com.intuit.ipp.data.SalesItemLineDetail;
-import com.intuit.ipp.services.QueryResult;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.log4j.Logger;
@@ -32,12 +16,29 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.developer.tutorials.client.OAuth2PlatformClientFactory;
 import com.intuit.developer.tutorials.helper.QBOServiceHelper;
+import com.intuit.ipp.core.IEntity;
+import com.intuit.ipp.data.Account;
+import com.intuit.ipp.data.AccountSubTypeEnum;
+import com.intuit.ipp.data.AccountTypeEnum;
+import com.intuit.ipp.data.Customer;
+import com.intuit.ipp.data.EmailAddress;
 import com.intuit.ipp.data.Error;
+import com.intuit.ipp.data.IntuitEntity;
+import com.intuit.ipp.data.Invoice;
+import com.intuit.ipp.data.Item;
+import com.intuit.ipp.data.ItemTypeEnum;
+import com.intuit.ipp.data.Line;
+import com.intuit.ipp.data.LineDetailTypeEnum;
+import com.intuit.ipp.data.ReferenceType;
+import com.intuit.ipp.data.SalesItemLineDetail;
 import com.intuit.ipp.exception.FMSException;
 import com.intuit.ipp.exception.InvalidTokenException;
 import com.intuit.ipp.services.DataService;
+import com.intuit.ipp.services.QueryResult;
 
 /**
  * @author bcole
@@ -53,6 +54,8 @@ public class InventoryController {
 	public QBOServiceHelper helper;
 
 	private static final Logger logger = Logger.getLogger(InventoryController.class);
+	
+	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1";
 
 
 	/**
@@ -84,13 +87,13 @@ public class InventoryController {
 			Customer customer = getCustomerWithAllFields();
 			Customer savedCustomer = service.add(customer);
 			Invoice invoice = getInvoiceFields(savedCustomer, savedItem);
-			Invoice savedInvoice = service.add(invoice);
+			service.add(invoice);
 
 			// Query inventory item - there should be 9 items now!
 			Item itemsRemaining = service.findById(savedItem);
 
 			// Return response back - take a look at "qtyOnHand" in the output (should be 9)
-			return processResponse(itemsRemaining);
+			return createResponse(itemsRemaining);
 
 		} catch (InvalidTokenException e) {
 			return new JSONObject().put("response", "InvalidToken - Refresh token and try again").toString();
@@ -102,7 +105,13 @@ public class InventoryController {
 	}
 
 
-	private static Item getItemWithAllFields(DataService service) throws FMSException {
+	/**
+	 * Prepare Item request
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Item getItemWithAllFields(DataService service) throws FMSException {
 		Item item = new Item();
 		item.setType(ItemTypeEnum.INVENTORY);
 		item.setName("Inventory Item " + RandomStringUtils.randomAlphanumeric(5));
@@ -113,18 +122,22 @@ public class InventoryController {
 		item.setTrackQtyOnHand(true);
 
 		Account incomeBankAccount = getIncomeBankAccount(service);
-		item.setIncomeAccountRef(getAccountRef(incomeBankAccount));
+		item.setIncomeAccountRef(createRef(incomeBankAccount));
 
 		Account expenseBankAccount = getExpenseBankAccount(service);
-		item.setExpenseAccountRef(getAccountRef(expenseBankAccount));
+		item.setExpenseAccountRef(createRef(expenseBankAccount));
 
 		Account assetAccount = getAssetAccount(service);
-		item.setAssetAccountRef(getAccountRef(assetAccount));
+		item.setAssetAccountRef(createRef(assetAccount));
 
 		return item;
 	}
 
-	private static Customer getCustomerWithAllFields() {
+	/**
+	 * Prepare Customer request
+	 * @return
+	 */
+	private Customer getCustomerWithAllFields() {
 		Customer customer = new Customer();
 		customer.setDisplayName(org.apache.commons.lang.RandomStringUtils.randomAlphanumeric(6));
 		customer.setCompanyName("ABC Corporations");
@@ -136,12 +149,15 @@ public class InventoryController {
 		return customer;
 	}
 
-	private static Invoice getInvoiceFields(Customer customer, Item item) {
+	/**
+	 * Prepare Invoice Request
+	 * @param customer
+	 * @param item
+	 * @return
+	 */
+	private Invoice getInvoiceFields(Customer customer, Item item) {
 		Invoice invoice = new Invoice();
-
-		ReferenceType customerRef = new ReferenceType();
-		customerRef.setValue(customer.getId());
-		invoice.setCustomerRef(customerRef);
+		invoice.setCustomerRef(createRef(customer));
 
 		List<Line> invLine = new ArrayList<Line>();
 		Line line = new Line();
@@ -150,10 +166,7 @@ public class InventoryController {
 
 		SalesItemLineDetail silDetails = new SalesItemLineDetail();
 		silDetails.setQty(BigDecimal.valueOf(1));
-
-		ReferenceType itemRef = new ReferenceType();
-		itemRef.setValue(item.getId());
-		silDetails.setItemRef(itemRef);
+		silDetails.setItemRef(createRef(item));
 
 		line.setSalesItemLineDetail(silDetails);
 		invLine.add(line);
@@ -162,127 +175,133 @@ public class InventoryController {
 		return invoice;
 	}
 
-	public static ReferenceType getAccountRef(Account account) {
-		ReferenceType accountRef = new ReferenceType();
-		accountRef.setName(account.getName());
-		accountRef.setValue(account.getId());
-		return accountRef;
-	}
 
-	public static Account getIncomeBankAccount(DataService service) throws FMSException {
-		QueryResult queryResult = service.executeQuery(String.format(
-				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
-				AccountTypeEnum.INCOME.value(), AccountSubTypeEnum.SALES_OF_PRODUCT_INCOME.value()
-		));
-		List<Account> accounts = (List<Account>) queryResult.getEntities();
-		if (!accounts.isEmpty()) {
-			return accounts.get(0);
+
+	/**
+	 * Get Income Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account getIncomeBankAccount(DataService service) throws FMSException {
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.INCOME.value(), AccountSubTypeEnum.SALES_OF_PRODUCT_INCOME.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
 		}
 		return createIncomeBankAccount(service);
 	}
 
-	private static Account createIncomeBankAccount(DataService service) throws FMSException {
-		return service.add(getIncomeBankAccountFields());
-	}
-
-	public static Account getIncomeBankAccountFields() throws FMSException {
+	/**
+	 * Create Income Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account createIncomeBankAccount(DataService service) throws FMSException {
 		Account account = new Account();
 		account.setName("Income " + RandomStringUtils.randomAlphabetic(5));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
-		account.setClassification(AccountClassificationEnum.REVENUE);
 		account.setAccountType(AccountTypeEnum.INCOME);
 		account.setAccountSubType(AccountSubTypeEnum.SALES_OF_PRODUCT_INCOME.value());
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		ReferenceType currencyRef = new ReferenceType();
-		currencyRef.setName("United States Dollar");
-		currencyRef.setValue("USD");
-		account.setCurrencyRef(currencyRef);
-
-		return account;
+		
+		return service.add(account);
 	}
 
-	public static Account getExpenseBankAccount(DataService service) throws FMSException {
-		QueryResult queryResult = service.executeQuery(String.format(
-				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
-				AccountTypeEnum.COST_OF_GOODS_SOLD.value(), AccountSubTypeEnum.SUPPLIES_MATERIALS_COGS.value()
-		));
-		List<Account> accounts = (List<Account>) queryResult.getEntities();
-		if (!accounts.isEmpty()) {
-			return accounts.get(0);
+	/**
+	 * Get Expense Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account getExpenseBankAccount(DataService service) throws FMSException {
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.COST_OF_GOODS_SOLD.value(), AccountSubTypeEnum.SUPPLIES_MATERIALS_COGS.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
 		}
 		return createExpenseBankAccount(service);
 	}
 
-	private static Account createExpenseBankAccount(DataService service) throws FMSException {
-		return service.add(getExpenseBankAccountFields());
-	}
-
-	public static Account getExpenseBankAccountFields() throws FMSException {
+	/**
+	 * Create Expense Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account createExpenseBankAccount(DataService service) throws FMSException {
 		Account account = new Account();
 		account.setName("Expense " + RandomStringUtils.randomAlphabetic(5));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
-		account.setClassification(AccountClassificationEnum.EXPENSE);
 		account.setAccountType(AccountTypeEnum.COST_OF_GOODS_SOLD);
 		account.setAccountSubType(AccountSubTypeEnum.SUPPLIES_MATERIALS_COGS.value());
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		ReferenceType currencyRef = new ReferenceType();
-		currencyRef.setName("United States Dollar");
-		currencyRef.setValue("USD");
-		account.setCurrencyRef(currencyRef);
-
-		return account;
+		
+		return service.add(account);
 	}
 
-	public static Account getAssetAccount(DataService service)  throws FMSException{
-		QueryResult queryResult = service.executeQuery(String.format(
-				"select * from Account where AccountType='%s' and AccountSubType='%s' maxresults 1",
-				AccountTypeEnum.OTHER_CURRENT_ASSET.value(), AccountSubTypeEnum.INVENTORY.value()
-		));
-		List<Account> accounts = (List<Account>) queryResult.getEntities();
-		if (!accounts.isEmpty()) {
-			return accounts.get(0);
+
+	/**
+	 * Get Asset Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account getAssetAccount(DataService service)  throws FMSException{
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.OTHER_CURRENT_ASSET.value(), AccountSubTypeEnum.INVENTORY.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
 		}
 		return createOtherCurrentAssetAccount(service);
 	}
 
-	private static Account createOtherCurrentAssetAccount(DataService service) throws FMSException {
-		return service.add(getOtherCurrentAssetAccountFields());
-	}
-
-	public static Account getOtherCurrentAssetAccountFields() throws FMSException {
+	/**
+	 * Create Asset Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account createOtherCurrentAssetAccount(DataService service) throws FMSException {
 		Account account = new Account();
 		account.setName("Other Current Asset " + RandomStringUtils.randomAlphanumeric(5));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
-		account.setClassification(AccountClassificationEnum.ASSET);
 		account.setAccountType(AccountTypeEnum.OTHER_CURRENT_ASSET);
 		account.setAccountSubType(AccountSubTypeEnum.INVENTORY.value());
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		ReferenceType currencyRef = new ReferenceType();
-		currencyRef.setName("United States Dollar");
-		currencyRef.setValue("USD");
-		account.setCurrencyRef(currencyRef);
-
-		return account;
+		
+		return service.add(account);
 	}
 
-	private String processResponse(Object entity) {
+	/**
+	 * Creates reference type for an entity
+	 * 
+	 * @param entity - IntuitEntity object inherited by each entity
+	 * @return
+	 */
+	private ReferenceType createRef(IntuitEntity entity) {
+		ReferenceType referenceType = new ReferenceType();
+		referenceType.setValue(entity.getId());
+		return referenceType;
+	}
+
+	/**
+	 * Map object to json string
+	 * @param entity
+	 * @return
+	 */
+	private String createResponse(Object entity) {
 		ObjectMapper mapper = new ObjectMapper();
+		String jsonInString;
 		try {
-			String jsonInString = mapper.writeValueAsString(entity);
-			return jsonInString;
+			jsonInString = mapper.writeValueAsString(entity);
 		} catch (JsonProcessingException e) {
-			logger.error("Exception while managing inventory ", e);
-			return new JSONObject().put("response","Failed").toString();
+			return createErrorResponse(e);
+		} catch (Exception e) {
+			return createErrorResponse(e);
 		}
+		return jsonInString;
 	}
+
+	private String createErrorResponse(Exception e) {
+		logger.error("Exception while calling QBO ", e);
+		return new JSONObject().put("response","Failed").toString();
+	}
+
 
 }

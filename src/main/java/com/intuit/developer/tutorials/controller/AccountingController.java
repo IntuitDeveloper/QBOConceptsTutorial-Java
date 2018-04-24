@@ -3,14 +3,10 @@ package com.intuit.developer.tutorials.controller;
 import java.math.BigDecimal;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import javax.servlet.http.HttpSession;
 
-import com.intuit.ipp.data.*;
-import com.intuit.ipp.data.Error;
-import com.intuit.ipp.util.DateUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
@@ -20,11 +16,31 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.developer.tutorials.client.OAuth2PlatformClientFactory;
 import com.intuit.developer.tutorials.helper.QBOServiceHelper;
+import com.intuit.ipp.core.IEntity;
+import com.intuit.ipp.data.Account;
+import com.intuit.ipp.data.AccountClassificationEnum;
+import com.intuit.ipp.data.AccountSubTypeEnum;
+import com.intuit.ipp.data.AccountTypeEnum;
+import com.intuit.ipp.data.EntityTypeEnum;
+import com.intuit.ipp.data.EntityTypeRef;
+import com.intuit.ipp.data.Error;
+import com.intuit.ipp.data.IntuitEntity;
+import com.intuit.ipp.data.JournalEntry;
+import com.intuit.ipp.data.JournalEntryLineDetail;
+import com.intuit.ipp.data.Line;
+import com.intuit.ipp.data.LineDetailTypeEnum;
+import com.intuit.ipp.data.PostingTypeEnum;
+import com.intuit.ipp.data.ReferenceType;
+import com.intuit.ipp.data.Vendor;
 import com.intuit.ipp.exception.FMSException;
 import com.intuit.ipp.exception.InvalidTokenException;
 import com.intuit.ipp.services.DataService;
+import com.intuit.ipp.services.QueryResult;
+import com.intuit.ipp.util.DateUtils;
 
 /**
  * @author dderose
@@ -38,9 +54,10 @@ public class AccountingController {
 	
 	@Autowired
     public QBOServiceHelper helper;
-
 	
 	private static final Logger logger = Logger.getLogger(AccountingController.class);
+	
+	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' maxresults 1";
 	
 	
 	/**
@@ -72,23 +89,12 @@ public class AccountingController {
             Account savedCreditAccount = getCreditCardBankAccount(service);
     		
     		// Create Journal Entry using the accounts above
+            JournalEntry journalentry = getJournalEntryFields(service, savedDebitAccount, savedCreditAccount);
+            JournalEntry savedJournalEntry = service.add(journalentry);
+            logger.info("JournalEntry created: " + savedJournalEntry.getId());
 
-			try{
-			    // Add JournalEntry
-                JournalEntry journalentry = getJournalEntryFields(service, savedDebitAccount, savedCreditAccount);
-                JournalEntry savedJournalEntry = service.add(journalentry);
-                logger.info("JournalEntry created: " + savedJournalEntry.getId());
-
-                // Return the result
-                String result = "Created Journal Entry = " + savedJournalEntry.getId();
-
-                return result;
-
-			} catch (Exception e) {
-                logger.error("Error while calling entity add:: " + e.getMessage());
-            }
-
-    		return "";
+            // Return the result
+    		return createResponse(savedJournalEntry);
 			
 		}
 	        
@@ -98,33 +104,11 @@ public class AccountingController {
 			List<Error> list = e.getErrorList();
 			list.forEach(error -> logger.error("Error while calling the API :: " + error.getMessage()));
 			return new JSONObject().put("response","Failed").toString();
+		} catch (ParseException e) {
+			return new JSONObject().put("response","Parse Exception").toString();
 		}
     }
 
-
-
-    /**
-     * Initializes a DebitAccount object
-     *
-     * @return DebitAccount object
-     * @throws FMSException
-     */
-	private static Account getDebitAccountFields() throws FMSException {
-
-        Account account = new Account();
-		account.setName("Ba" + RandomStringUtils.randomAlphanumeric(7));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
-		account.setClassification(AccountClassificationEnum.ASSET);
-		account.setAccountType(AccountTypeEnum.BANK);
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		account.setTxnLocationType("FranceOverseas");
-		account.setAcctNum("B" + RandomStringUtils.randomAlphanumeric(6));
-
-		return account;
-	}
 
     /**
      * Create OR lookup Debit Account
@@ -133,19 +117,13 @@ public class AccountingController {
      * @return The BankAccount object
      * @throws FMSException
      */
-    private static Account getDebitAccount(DataService service) throws FMSException {
+    private Account getDebitAccount(DataService service) throws FMSException {
 
-        List<Account> accounts = (List<Account>) service.findAll(new Account());
-
-        if (!accounts.isEmpty()) {
-            Iterator<Account> itr = accounts.iterator();
-            while (itr.hasNext()) {
-                Account account = itr.next();
-                if (account.getAccountType().equals(AccountTypeEnum.BANK)) {
-                    return account;
-                }
-            }
-        }
+    	QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.BANK.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
+		}
 
         return createDebitAccount(service);
     }
@@ -157,8 +135,13 @@ public class AccountingController {
      * @return The DebitAccount object
      * @throws FMSException
      */
-    private static Account createDebitAccount(DataService service) throws FMSException {
-        return service.add(getDebitAccountFields());
+    private Account createDebitAccount(DataService service) throws FMSException {
+    	 Account account = new Account();
+ 		account.setName("Ba" + RandomStringUtils.randomAlphanumeric(7));
+ 		account.setClassification(AccountClassificationEnum.ASSET);
+ 		account.setAccountType(AccountTypeEnum.BANK);
+ 		
+        return service.add(account);
     }
 
     /**
@@ -168,17 +151,14 @@ public class AccountingController {
      * @return The CreditCard account
      * @throws FMSException
      */
-	private static Account getCreditCardBankAccount(DataService service) throws FMSException {
-		List<Account> accounts = (List<Account>) service.findAll(new Account());
-		if (!accounts.isEmpty()) {
-			Iterator<Account> itr = accounts.iterator();
-			while (itr.hasNext()) {
-				Account account = itr.next();
-				if (account.getAccountType().equals(AccountTypeEnum.CREDIT_CARD)) {
-					return account;
-				}
-			}
+	private Account getCreditCardBankAccount(DataService service) throws FMSException {
+		
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.CREDIT_CARD.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
+		if(!entities.isEmpty()) {
+			return (Account)entities.get(0);
 		}
+
 		return createCreditCardBankAccount(service);
 	}
 
@@ -189,34 +169,16 @@ public class AccountingController {
      * @return The CreditCard account returned by the QBO V3 Service
      * @throws FMSException
      */
-	private static Account createCreditCardBankAccount(DataService service) throws FMSException {
-		return service.add(getCreditCardBankAccountFields());
-	}
-
-    /**
-     * Initializes a CreditCard Account object
-     *
-     * @return The CreditCard account object
-     * @throws FMSException
-     */
-	private static Account getCreditCardBankAccountFields() throws FMSException {
+	private Account createCreditCardBankAccount(DataService service) throws FMSException {
 		Account account = new Account();
 		account.setName("CreditCa" + RandomStringUtils.randomAlphabetic(5));
-		account.setSubAccount(false);
-		account.setFullyQualifiedName(account.getName());
-		account.setActive(true);
 		account.setClassification(AccountClassificationEnum.LIABILITY);
 		account.setAccountType(AccountTypeEnum.CREDIT_CARD);
 		account.setAccountSubType(AccountSubTypeEnum.CREDIT_CARD.value());
-		account.setCurrentBalance(new BigDecimal("0"));
-		account.setCurrentBalanceWithSubAccounts(new BigDecimal("0"));
-		ReferenceType currencyRef = new ReferenceType();
-		currencyRef.setName("United States Dollar");
-		currencyRef.setValue("USD");
-		account.setCurrencyRef(currencyRef);
-
-		return account;
+		
+		return service.add(account);
 	}
+
 
 
 	// Journal Entry methods
@@ -233,7 +195,7 @@ public class AccountingController {
      * @throws FMSException
      * @throws ParseException
      */
-	private static JournalEntry getJournalEntryFields(DataService service, Account debitAccount, Account creditAccount) throws FMSException, ParseException {
+	private JournalEntry getJournalEntryFields(DataService service, Account debitAccount, Account creditAccount) throws FMSException, ParseException {
 
 	    JournalEntry journalEntry = new JournalEntry();
 		try {
@@ -248,7 +210,7 @@ public class AccountingController {
 		JournalEntryLineDetail journalEntryLineDetail1 = new JournalEntryLineDetail();
 		journalEntryLineDetail1.setPostingType(PostingTypeEnum.DEBIT);
 
-		journalEntryLineDetail1.setAccountRef(getAccountRef(debitAccount));
+		journalEntryLineDetail1.setAccountRef(createRef(debitAccount));
 
 		line1.setJournalEntryLineDetail(journalEntryLineDetail1);
 		line1.setDescription("Description " + RandomStringUtils.randomAlphanumeric(15));
@@ -260,10 +222,10 @@ public class AccountingController {
 		JournalEntryLineDetail journalEntryLineDetail2 = new JournalEntryLineDetail();
 		journalEntryLineDetail2.setPostingType(PostingTypeEnum.CREDIT);
 
-		journalEntryLineDetail2.setAccountRef(getAccountRef(creditAccount));
+		journalEntryLineDetail2.setAccountRef(createRef(creditAccount));
 		EntityTypeRef eRef = new EntityTypeRef();
 		eRef.setType(EntityTypeEnum.VENDOR);
-		eRef.setEntityRef(getVendorRef(getVendor(service)));    // Set a Vendor as reference
+		eRef.setEntityRef(createRef(getVendor(service)));    // Set a Vendor as reference
 		journalEntryLineDetail2.setEntity(eRef);
 
 		line2.setJournalEntryLineDetail(journalEntryLineDetail2);
@@ -280,18 +242,6 @@ public class AccountingController {
 		return journalEntry;
 	}
 
-    /**
-     * Fetch the Account Reference to the given Account
-     *
-     * @param account The Account object
-     * @return Account reference
-     */
-	private static ReferenceType getAccountRef(Account account) {
-		ReferenceType accountRef = new ReferenceType();
-		accountRef.setName(account.getName());
-		accountRef.setValue(account.getId());
-		return accountRef;
-	}
 
     /**
      * Create OR lookup Vendor
@@ -301,7 +251,7 @@ public class AccountingController {
      * @throws FMSException
      * @throws ParseException
      */
-	private static Vendor getVendor(DataService service) throws FMSException, ParseException {
+	private Vendor getVendor(DataService service) throws FMSException, ParseException {
 		List<Vendor> vendors = (List<Vendor>) service.findAll(new Vendor());
 
 		if (!vendors.isEmpty()) {
@@ -318,7 +268,7 @@ public class AccountingController {
      * @throws FMSException
      * @throws ParseException
      */
-	private static Vendor createVendor(DataService service) throws FMSException, ParseException {
+	private Vendor createVendor(DataService service) throws FMSException, ParseException {
 		return service.add(getVendorWithAllFields(service));
 	}
 
@@ -330,7 +280,7 @@ public class AccountingController {
      * @throws FMSException
      * @throws ParseException
      */
-	private static Vendor getVendorWithAllFields(DataService service) throws FMSException, ParseException {
+	private Vendor getVendorWithAllFields(DataService service) throws FMSException, ParseException {
 		Vendor vendor = new Vendor();
 		// Mandatory Fields
 		vendor.setDisplayName(RandomStringUtils.randomAlphanumeric(8));
@@ -344,17 +294,40 @@ public class AccountingController {
 		return vendor;
 
 	}
-
-    /**
-     * Fetch the Vendor Reference for the given Vendor
-     *
-     * @param vendor The Vendor object
-     * @return Vendor reference
-     */
-    private static ReferenceType getVendorRef(Vendor vendor) {
-		ReferenceType vendorRef = new ReferenceType();
-		vendorRef.setName(vendor.getDisplayName());
-		vendorRef.setValue(vendor.getId());
-		return vendorRef;
+    
+	/**
+	 * Creates reference type for an entity
+	 * 
+	 * @param entity - IntuitEntity object inherited by each entity
+	 * @return
+	 */
+	private ReferenceType createRef(IntuitEntity entity) {
+		ReferenceType referenceType = new ReferenceType();
+		referenceType.setValue(entity.getId());
+		return referenceType;
 	}
+
+	/**
+	 * Map object to json string
+	 * @param entity
+	 * @return
+	 */
+	private String createResponse(Object entity) {
+		ObjectMapper mapper = new ObjectMapper();
+		String jsonInString;
+		try {
+			jsonInString = mapper.writeValueAsString(entity);
+		} catch (JsonProcessingException e) {
+			return createErrorResponse(e);
+		} catch (Exception e) {
+			return createErrorResponse(e);
+		}
+		return jsonInString;
+	}
+
+	private String createErrorResponse(Exception e) {
+		logger.error("Exception while calling QBO ", e);
+		return new JSONObject().put("response","Failed").toString();
+	}
+
 }

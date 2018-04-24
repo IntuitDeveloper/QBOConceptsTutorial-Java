@@ -2,34 +2,11 @@ package com.intuit.developer.tutorials.controller;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.servlet.http.HttpSession;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.intuit.ipp.core.Context;
-import com.intuit.ipp.core.IEntity;
-import com.intuit.ipp.core.ServiceType;
-import com.intuit.ipp.data.Account;
-import com.intuit.ipp.data.AccountTypeEnum;
-import com.intuit.ipp.data.Customer;
-import com.intuit.ipp.data.DiscountLineDetail;
-import com.intuit.ipp.data.Estimate;
-import com.intuit.ipp.data.IntuitEntity;
-import com.intuit.ipp.data.Invoice;
-import com.intuit.ipp.data.Item;
-import com.intuit.ipp.data.ItemTypeEnum;
-import com.intuit.ipp.data.Line;
-import com.intuit.ipp.data.LineDetailTypeEnum;
-import com.intuit.ipp.data.ReferenceType;
-import com.intuit.ipp.data.SalesItemLineDetail;
-import com.intuit.ipp.security.OAuth2Authorizer;
-import com.intuit.ipp.services.QueryResult;
-import com.intuit.ipp.util.Config;
-import com.intuit.ipp.util.DateUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.log4j.Logger;
@@ -39,12 +16,31 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intuit.developer.tutorials.client.OAuth2PlatformClientFactory;
 import com.intuit.developer.tutorials.helper.QBOServiceHelper;
+import com.intuit.ipp.core.IEntity;
+import com.intuit.ipp.data.Account;
+import com.intuit.ipp.data.AccountTypeEnum;
+import com.intuit.ipp.data.Customer;
+import com.intuit.ipp.data.DiscountLineDetail;
 import com.intuit.ipp.data.Error;
+import com.intuit.ipp.data.Estimate;
+import com.intuit.ipp.data.IntuitEntity;
+import com.intuit.ipp.data.Invoice;
+import com.intuit.ipp.data.Item;
+import com.intuit.ipp.data.ItemTypeEnum;
+import com.intuit.ipp.data.Line;
+import com.intuit.ipp.data.LineDetailTypeEnum;
+import com.intuit.ipp.data.LinkedTxn;
+import com.intuit.ipp.data.ReferenceType;
+import com.intuit.ipp.data.SalesItemLineDetail;
+import com.intuit.ipp.data.TxnTypeEnum;
 import com.intuit.ipp.exception.FMSException;
 import com.intuit.ipp.exception.InvalidTokenException;
 import com.intuit.ipp.services.DataService;
+import com.intuit.ipp.services.QueryResult;
 
 /**
  * @author dderose
@@ -53,18 +49,18 @@ import com.intuit.ipp.services.DataService;
 @Controller
 public class JobsController {
 
-	private static final String MINOR_VERSION = "4";
-
-	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' maxresults 1";
-
 	@Autowired
 	OAuth2PlatformClientFactory factory;
 	
 	@Autowired
     public QBOServiceHelper helper;
 
-	
 	private static final Logger logger = Logger.getLogger(JobsController.class);
+	
+	private static final String MINOR_VERSION = "4";
+
+	private static final String ACCOUNT_QUERY = "select * from Account where AccountType='%s' maxresults 1";
+
 	
 	
 	/**
@@ -86,42 +82,34 @@ public class JobsController {
         try {
         	
         	//get DataService
-    		DataService service = getDataService(realmId, accessToken, MINOR_VERSION);
+    		DataService service = helper.getDataService(realmId, accessToken, MINOR_VERSION);
 
 			//add customer
 			Customer customer = getCustomerWithMandatoryFields();
-
-			final Customer customerResult = service.add(customer);
+			Customer customerResult = service.add(customer);
 
 			//add item
-
 			Item item = getItemWithMandatoryFields(service);
-
-			final Item itemResult = service.add(item);
+			Item itemResult = service.add(item);
     		
     		//create estimate
 			Estimate estimate = getEstimateWithMandatoryFields(itemResult, customerResult, service);
-
-			final Estimate createdEstimate = service.add(estimate);
+			Estimate createdEstimate = service.add(estimate);
 
 			//update estimate -change amt
-
 			createdEstimate.setTotalAmt(new BigDecimal("400.00"));
-
-			final Estimate updatedEstimate = service.update(createdEstimate);
+			Estimate updatedEstimate = service.update(createdEstimate);
 
 			//create invoice using estimate data
-
-			Invoice invoice = getInvoiceFieldsFromEstimate(estimate);
-
-			final Invoice createdInvoice = service.add(invoice);
+			Invoice invoice = getInvoiceFieldsFromEstimate(updatedEstimate);
+			Invoice createdInvoice = service.add(invoice);
 
 			//update invoice to add discount
             Line discountLine = createDiscountLine(service);
 			createdInvoice.getLine().add(discountLine);
 
 			//update the invoice with the discount line
-			final Invoice updatedInvoice = service.update(createdInvoice);
+			Invoice updatedInvoice = service.update(createdInvoice);
 
 			//return response back
     		return createResponse(updatedInvoice);
@@ -133,12 +121,100 @@ public class JobsController {
 			return new JSONObject().put("response","Failed").toString();
 		}
     }
+	
+	/**
+	 * Prepare Customer request
+	 * 
+	 * @return
+	 */
+	private Customer getCustomerWithMandatoryFields() {
+		Customer customer = new Customer();
+		customer.setDisplayName(RandomStringUtils.randomAlphanumeric(6));
+		return customer;
+	}
+	
 
+	/**
+	 * Prepare Item request
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Item getItemWithMandatoryFields(DataService service) throws FMSException {
+		Item item = new Item();
+		item.setName("Item" + RandomStringUtils.randomAlphanumeric(5));
+		item.setTaxable(false);
+		item.setUnitPrice(new BigDecimal("200"));
+		item.setType(ItemTypeEnum.SERVICE);
+
+		Account incomeAccount = getIncomeBankAccount(service);
+		item.setIncomeAccountRef(createRef(incomeAccount));
+		return item;
+	}
+	
+	/**
+	 * Prepare Estimate request
+	 * @param item
+	 * @param customer
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Estimate getEstimateWithMandatoryFields(Item item, Customer customer, DataService service) throws FMSException {
+		Estimate estimate = new Estimate();
+	
+		Line line1 = new Line();
+		line1.setLineNum(new BigInteger("1"));
+		line1.setAmount(new BigDecimal("300.00"));
+		line1.setDetailType(LineDetailTypeEnum.SALES_ITEM_LINE_DETAIL);
+
+		SalesItemLineDetail salesItemLineDetail1 = new SalesItemLineDetail();
+		salesItemLineDetail1.setItemRef(createRef(item));
+		line1.setSalesItemLineDetail(salesItemLineDetail1);
+
+		List<Line> lines1 = new ArrayList<>();
+		lines1.add(line1);
+		estimate.setLine(lines1);
+
+		estimate.setCustomerRef(createRef(customer));
+		return estimate;
+	}
+
+	/**
+	 * Prepare Invoice request
+	 * @param estimate
+	 * @return
+	 */
+	private Invoice getInvoiceFieldsFromEstimate(Estimate estimate) {
+		Invoice invoice = new Invoice();
+		invoice.setCustomerRef(estimate.getCustomerRef());
+		
+		invoice.setLine(estimate.getLine());
+		
+		List<LinkedTxn> linkedTxnList = new ArrayList<LinkedTxn>();
+		LinkedTxn linkedTxn = new LinkedTxn();
+		linkedTxn.setTxnId(estimate.getId());
+		linkedTxn.setTxnType(TxnTypeEnum.ESTIMATE.value());
+		linkedTxnList.add(linkedTxn);
+		
+		invoice.setLinkedTxn(linkedTxnList);
+
+		return invoice;
+	}
+
+
+    /**
+     * Create DiscountLineDetail object
+     * 
+     * @param service
+     * @return
+     * @throws FMSException
+     */
     private Line createDiscountLine(DataService service) throws FMSException {
         DiscountLineDetail discountLineDetail = new DiscountLineDetail();
 
         discountLineDetail.setPercentBased(false);
-        discountLineDetail.setDiscountAccountRef(createRef(findAccountByType(AccountTypeEnum.INCOME, service)));
+        discountLineDetail.setDiscountAccountRef(createRef(getIncomeBankAccount(service)));
 
         Line discountLine = new Line();
 
@@ -148,159 +224,53 @@ public class JobsController {
         return discountLine;
     }
 
-    /**
-	 * This method is an override with duplication of the QBOServiceHelper
-	 * to pass in a different minor version.  This is due to an invoice update
-	 * failing with the discount line for minor version "23" (SDK default), hence
-	 * overriding with the minor version "4"
-	 *
-	 * @param realmId
-	 * @param accessToken
+
+	/**
+	 * Get Income Account
+	 * @param service
 	 * @return
 	 * @throws FMSException
 	 */
-	private DataService getDataService(String realmId, String accessToken, String minorVersion) throws FMSException {
-
-		//get DataService
-		String url = factory.getPropertyValue("IntuitAccountingAPIHost") + "/v3/company";
-
-		Config.setProperty(Config.BASE_URL_QBO, url);
-		//create oauth object
-		OAuth2Authorizer oauth = new OAuth2Authorizer(accessToken);
-
-		Context context = new Context(oauth, ServiceType.QBO, realmId);
-		context.setMinorVersion(minorVersion);
-
-		// create dataservice
-		return new DataService(context);
-	}
-
-
-	private Invoice getInvoiceFieldsFromEstimate(Estimate estimate) {
-		Invoice invoice = new Invoice();
-
-		invoice.setCustomerRef(estimate.getCustomerRef());
-
-		List<Line> invoiceLine = new ArrayList<>();
-
-
-		Line line = null;
-
-		if(estimate.getLine()!=null && !estimate.getLine().isEmpty()) {
-			line = estimate.getLine().get(0);
-		}
-
-		SalesItemLineDetail silDetails = new SalesItemLineDetail();
-
-		if(estimate.getLine()!=null && !estimate.getLine().isEmpty()
-				&& estimate.getLine().get(0).getSalesItemLineDetail()!=null ) {
-			silDetails.setItemRef(estimate.getLine().get(0).getSalesItemLineDetail().getItemRef());
-		}
-
-		line.setSalesItemLineDetail(silDetails);
-		invoiceLine.add(line);
-		invoice.setLine(invoiceLine);
-
-		return invoice;
-	}
-
-	private Estimate getEstimateWithMandatoryFields(Item item, Customer customer, DataService service) throws FMSException {
-		Estimate estimate = new Estimate();
-		estimate.setDocNumber(RandomStringUtils.randomNumeric(4));
-		try {
-			estimate.setTxnDate(DateUtils.getCurrentDateTime());
-		} catch (ParseException e) {
-			throw new FMSException("ParseException while getting current date.");
-		}
-		try {
-			estimate.setExpirationDate(DateUtils.getDateWithNextDays(15));
-		} catch (ParseException e) {
-			throw new FMSException("ParseException while getting current date + 15 days.");
-		}
-
-		Line line1 = new Line();
-		line1.setLineNum(new BigInteger("1"));
-		line1.setAmount(new BigDecimal("300.00"));
-		line1.setDetailType(LineDetailTypeEnum.SALES_ITEM_LINE_DETAIL);
-
-		SalesItemLineDetail salesItemLineDetail1 = new SalesItemLineDetail();
-		salesItemLineDetail1.setItemRef(createRef(item));
-
-		ReferenceType taxCodeRef1 = new ReferenceType();
-		taxCodeRef1.setValue("NON");
-		salesItemLineDetail1.setTaxCodeRef(taxCodeRef1);
-		line1.setSalesItemLineDetail(salesItemLineDetail1);
-
-		List<Line> lines1 = new ArrayList<>();
-		lines1.add(line1);
-		estimate.setLine(lines1);
-
-
-		Account depositAccount = findAccountByType(AccountTypeEnum.BANK, service);
-		estimate.setDepositToAccountRef(createRef(depositAccount));
-
-		estimate.setCustomerRef(createRef(customer));
-
-		estimate.setApplyTaxAfterDiscount(false);
-		estimate.setTotalAmt(new BigDecimal("300.00"));
-		estimate.setPrivateNote("Accurate Estimate");
-
-		return estimate;
-	}
-
-	private Account findAccountByType(AccountTypeEnum accountTypeEnum, DataService service) throws FMSException {
-
-		final QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, accountTypeEnum.value()));
-
-		final List<? extends IEntity> entities = queryResult.getEntities();
-
-		Account account = null;
-
+	private Account getIncomeBankAccount(DataService service) throws FMSException {
+		QueryResult queryResult = service.executeQuery(String.format(ACCOUNT_QUERY, AccountTypeEnum.INCOME.value()));
+		List<? extends IEntity> entities = queryResult.getEntities();
 		if(!entities.isEmpty()) {
-			account = (Account)entities.get(0);
+			return (Account)entities.get(0);
 		}
-		return account;
+		return createIncomeBankAccount(service);
 	}
 
-	private Customer getCustomerWithMandatoryFields() {
-		Customer customer = new Customer();
-		customer.setDisplayName(RandomStringUtils.randomAlphanumeric(6));
-		return customer;
+	/**
+	 * Create Income Account
+	 * @param service
+	 * @return
+	 * @throws FMSException
+	 */
+	private Account createIncomeBankAccount(DataService service) throws FMSException {
+		Account account = new Account();
+		account.setName("Incom" + RandomStringUtils.randomAlphabetic(5));
+		account.setAccountType(AccountTypeEnum.INCOME);
+		
+		return service.add(account);
 	}
 
-	private Item getItemWithMandatoryFields(DataService service) throws FMSException {
-		Item item = new Item();
-		item.setName("Item" + RandomStringUtils.randomAlphanumeric(5));
-		item.setActive(true);
-		item.setTaxable(false);
-		item.setUnitPrice(new BigDecimal("200"));
-		item.setType(ItemTypeEnum.SERVICE);
-
-		item.setIncomeAccountRef(createRef(findAccountByType(AccountTypeEnum.INCOME, service)));
-		item.setExpenseAccountRef(createRef(findAccountByType(AccountTypeEnum.EXPENSE, service)));
-		return item;
-	}
-
+	/**
+	 * Creates reference type for an entity
+	 * 
+	 * @param entity - IntuitEntity object inherited by each entity
+	 * @return
+	 */
 	private ReferenceType createRef(IntuitEntity entity) {
 		ReferenceType referenceType = new ReferenceType();
 		referenceType.setValue(entity.getId());
 		return referenceType;
 	}
 
-//	private ReferenceType createItemRef(Item item) {
-//		ReferenceType referenceType = new ReferenceType();
-//		referenceType.setName(item.getName());
-//		referenceType.setValue(item.getId());
-//		return referenceType;
-//	}
-//
-//	private ReferenceType createCustomerRef(Customer customer) {
-//		ReferenceType referenceType = new ReferenceType();
-//		referenceType.setName(customer.getFullyQualifiedName());
-//		referenceType.setValue(customer.getId());
-//		return referenceType;
-//	}
-
+	/**
+	 * Map object to json string
+	 * @param entity
+	 * @return
+	 */
 	private String createResponse(Object entity) {
 		ObjectMapper mapper = new ObjectMapper();
 		String jsonInString;
@@ -315,7 +285,8 @@ public class JobsController {
 	}
 
 	private String createErrorResponse(Exception e) {
-		logger.error("Exception while getting company info ", e);
+		logger.error("Exception while calling QBO ", e);
 		return new JSONObject().put("response","Failed").toString();
 	}
+
 }

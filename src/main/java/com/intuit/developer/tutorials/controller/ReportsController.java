@@ -1,7 +1,16 @@
 package com.intuit.developer.tutorials.controller;
 
 import java.util.List;
+
 import javax.servlet.http.HttpSession;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.log4j.Logger;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,13 +22,6 @@ import com.intuit.ipp.exception.FMSException;
 import com.intuit.ipp.exception.InvalidTokenException;
 import com.intuit.ipp.services.ReportName;
 import com.intuit.ipp.services.ReportService;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
-import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
  * @author dderose
@@ -32,8 +34,7 @@ public class ReportsController {
 	OAuth2PlatformClientFactory factory;
 
 	@Autowired
-    	public QBOServiceHelper helper;
-
+    public QBOServiceHelper helper;
 
 	private static final Logger logger = Logger.getLogger(ReportsController.class);
 
@@ -55,16 +56,58 @@ public class ReportsController {
 
     		String accessToken = (String)session.getAttribute("access_token");
         	try {
-			// get ReportService
-			ReportService service = getReportService("2017-01-01", "2017-12-31", "Customers",
-					realmId, accessToken);
+			
+        	// get ReportService
+        	ReportService service = helper.getReportService(realmId, accessToken);
+        	
+        	/*
+             * Read default profit and Loss report: 
+             * Default date used: This fiscal year to date
+             * Deafult accounting method: Defined in Preferences.ReportPrefs.ReportBasis. The two accepted values are "Accural" and "Cash"
+             * Default includes data for all customers
+             * */
+            Report defaultPnLReport = service.executeReport(ReportName.PROFITANDLOSS.toString());
+            
+            /*
+             * Read default Balance sheet report:
+             * Default date used: This fiscal year to date
+             * Deafult accounting method: Defined in Preferences.ReportPrefs.ReportBasis. The two accepted values are "Accural" and "Cash"
+             * Default includes data for all customers
+             * Default it is summarized by Total
+             * */  
+            Report defaultBalanceSheet = service.executeReport(ReportName.BALANCESHEET.toString());
+            
+            /*  report for given start and end date
+             *  set start_date and end_date properties in the ReportService instance with the date range in yyyy-mm-dd format
+             * */
+            
+            service.setStart_date("2018-01-01");
+            service.setEnd_date("2018-04-15");
+           
+            //Run BalanceSheet yearly report
+            defaultBalanceSheet = service.executeReport(ReportName.BALANCESHEET.toString());
+            
+            //Run P&L yearly report
+            defaultPnLReport = service.executeReport(ReportName.PROFITANDLOSS.toString());
 
-			String reportString = getReportString(service, ReportName.BALANCESHEET.toString());
-			logger.info("retrieved balance sheet report, " +  reportString);
-			reportString = getReportString(service, ReportName.PROFITANDLOSS.toString());
-			logger.info("retrieved profit and loss report" + reportString);
+           /* Year End Balance Sheet report summarized by Customer
+            * set the customer property to the customer.Id and set summarize_column_by property to "Customers"
+            * You can also set customer property with multiple customer ids comma seperated.
+            * You can summarize by the following:Total, Customers, Vendors, Classes, Departments, Employees, ProductsAndServices by setting the summarize_column_by property
+            * */
+            service.setSummarize_column_by("Customers");
+           
+            //Run BalanceSheet report summarized by column
+            defaultBalanceSheet = service.executeReport(ReportName.BALANCESHEET.toString());
+            logger.info("ReportName -> name: " + defaultBalanceSheet.getHeader().getReportName().toLowerCase());
+           
+            //Run P&L yearly report summarized by column
+            defaultPnLReport = service.executeReport(ReportName.PROFITANDLOSS.toString());
+            logger.info("ReportName -> name: " + defaultPnLReport.getHeader().getReportName().toLowerCase());
 
-			return reportString;
+            //return P&L response
+            return createResponse(defaultPnLReport);
+          
 		} catch (InvalidTokenException e) {
         		logger.error("invalid token: ", e);
 			return new JSONObject().put("response","InvalidToken - Refreshtoken and try again").toString();
@@ -76,56 +119,27 @@ public class ReportsController {
 
     	}
 
-	/**
-	 * Create a ReportService from given parameters
-	 * @param startDate start date of the report
-	 * @param endDate end date of the report
-	 * @param summarizeCriteria the criteria to sort the report
-	 * @param realmId unique identifier for the user
-	 * @param accessToken access token to authenticate the user
-	 * @return an instance of report service with configurations defined in parameters
-	 * @throws FMSException throw exception if failed to authenticate the user
-	 */
-    	private ReportService getReportService(String startDate, String endDate, String summarizeCriteria,
-										   String realmId, String accessToken) throws FMSException {
-		ReportService service = helper.getReportService(realmId, accessToken);
-
-		service.setStart_date(startDate);
-		service.setEnd_date(endDate);
-		service.setSummarize_column_by(summarizeCriteria);
-
-		service.setAccounting_method("Accrual");
-
-		return service;
-	}
 
 	/**
-	 * Get report by the given report name.
-	 * @param service the report service
-	 * @param reportName report name, e.g. "BalanceSheet", "ProfitAndLoss", etc.
-	 * @return report in JSON format specified by the report name.
-	 * @throws FMSException if failed to retrieve the report by report name.
+	 * Map object to json string
+	 * @param entity
+	 * @return
 	 */
-	private String getReportString(ReportService service, String reportName) throws FMSException {
-		Report report = service.executeReport(reportName);
-		logger.info("ReportName -> name: " + report.getHeader().getReportName().toLowerCase());
-
-		return processResponse(report);
-	}
-
-	/**
-	 * Map an object to a JSON object.
-	 * @param entity the entity to map
-	 * @return a JSON format of the object.
-	 */
-	private String processResponse(Object entity) {
+	private String createResponse(Object entity) {
 		ObjectMapper mapper = new ObjectMapper();
+		String jsonInString;
 		try {
-			String jsonInString = mapper.writeValueAsString(entity);
-			return jsonInString;
+			jsonInString = mapper.writeValueAsString(entity);
 		} catch (JsonProcessingException e) {
-			logger.error("Exception while getting report ", e);
-			return new JSONObject().put("response","Failed").toString();
+			return createErrorResponse(e);
+		} catch (Exception e) {
+			return createErrorResponse(e);
 		}
+		return jsonInString;
+	}
+
+	private String createErrorResponse(Exception e) {
+		logger.error("Exception while calling QBO ", e);
+		return new JSONObject().put("response","Failed").toString();
 	}
 }
