@@ -35,30 +35,49 @@ public class QBOServiceHelper {
 
 	public DataService getDataService(String realmId, String accessToken) throws FMSException {
 		
-    	String url = factory.getPropertyValue("IntuitAccountingAPIHost") + "/v3/company";
-
-		Config.setProperty(Config.BASE_URL_QBO, url);
-		//create oauth object
-		OAuth2Authorizer oauth = new OAuth2Authorizer(accessToken);
-		//create context
-		Context context = new Context(oauth, ServiceType.QBO, realmId);
+    	Context context = prepareContext(realmId, accessToken);
 
 		// create dataservice
 		return new DataService(context);
 	}
-	
-	public ReportService getReportService(String realmId, String accessToken) throws FMSException {
-		
-    	String url = factory.getPropertyValue("IntuitAccountingAPIHost") + "/v3/company";
+
+	private Context prepareContext(String realmId, String accessToken) throws FMSException {
+		String url = factory.getPropertyValue("IntuitAccountingAPIHost") + "/v3/company";
 
 		Config.setProperty(Config.BASE_URL_QBO, url);
 		//create oauth object
 		OAuth2Authorizer oauth = new OAuth2Authorizer(accessToken);
 		//create context
 		Context context = new Context(oauth, ServiceType.QBO, realmId);
+		return context;
+	}
+	
+	public ReportService getReportService(String realmId, String accessToken) throws FMSException {
+		
+    	Context context = prepareContext(realmId, accessToken);
 
 		// create dataservice
 		return new ReportService(context);
+	}
+	
+	/**
+	 * This method is an override with duplication of the QBOServiceHelper
+	 * to pass in a different minor version.  This is due to an invoice update
+	 * failing with the discount line for minor version "23" (SDK default), hence
+	 * overriding with the minor version "4"
+	 *
+	 * @param realmId
+	 * @param accessToken
+	 * @return
+	 * @throws FMSException
+	 */
+	public DataService getDataService(String realmId, String accessToken, String minorVersion) throws FMSException {
+
+		Context context = prepareContext(realmId, accessToken);
+		context.setMinorVersion(minorVersion);
+
+		// create dataservice
+		return new DataService(context);
 	}
 
 	
